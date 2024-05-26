@@ -1,0 +1,33 @@
+{
+  "name": "@atifhaque01/familytree",
+  "version": "1.0.0",
+  "description": "familytree",
+  "main": "./build/server.js",
+  "scripts": {
+    "test": "exit 0",
+    "build": "rimraf build/ && tsc --pretty",
+    "start": "node ./build/server"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/atifhaque01/familytree.git"
+  },
+  "keywords": [
+    "chess"
+  ],
+  "author": "Atif Haque",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/atifhaque01/familytree/issues"
+  },
+  "homepage": "https://github.com/atifhaque01/familytree#readme",
+  "devDependencies": {
+    "express": "^4.19.2",
+    "rimraf": "^5.0.7",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5"
+  },
+  "dependencies": {
+    "mongodb": "^6.6.2"
+  }
+}
