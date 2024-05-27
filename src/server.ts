@@ -13,13 +13,16 @@ app.use(express.json());
 app.post('/family/addMember', async (req: Request, res: Response) => {
   const newMember: Member = req.body.member;
   const relationship: number = Number(req.body.relationship);
-  newMember.generation = await family.getMember(req.body?.prevMember).then((member) => {
-    const prevGen: number = member?.generation || 0;
-    return +prevGen + +relationship;
-  });
+  newMember.generation = (newMember.generation != undefined) ? newMember.generation :
+    req.body?.prevMember ? await family.getMember(req.body?.prevMember)
+      .then((member) => {
+        const prevGen: number = member?.generation || 0;
+        return +prevGen + +relationship;
+      }) :
+      undefined;
   try {
-    family.addMember(newMember, req.body?.prevMember, req.body?.relationship).then(() => {
-      res.status(200).json({ message: 'New member added' });
+    family.addMember(newMember, req.body?.prevMember, req.body?.relationship).then((_id) => {
+      res.status(200).json(_id);
     })
   } catch (error) {
     res.status(500).json({ error: 'Failed to insert new member' });
@@ -27,7 +30,6 @@ app.post('/family/addMember', async (req: Request, res: Response) => {
 });
 
 app.post('/family/addRelationship', async (req: Request, res: Response) => {
-
   try {
     family.addRelationship(req.query?.source, req.query?.target, req.query?.relationship).then(() => {
       res.status(200).json({ message: 'New relationship added' });
@@ -60,6 +62,19 @@ app.get(`/family/getMemberByParam`, async (req: Request, res: Response) => {
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to retrieve family member' });
+  }
+});
+
+app.get(`/family/getAllMembers`, async (_req: Request, res: Response) => {
+  try {
+    family.getAllMembers().then((members) => {
+      if (!members) {
+        res.status(404).json({ error: 'Members not found' });
+      }
+      res.status(200).json(members);
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to retrieve family members' });
   }
 });
 
