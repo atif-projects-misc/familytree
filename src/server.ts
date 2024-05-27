@@ -1,41 +1,43 @@
-// src/server.ts
 import express, { Request, Response } from 'express';
-import { connectToDatabase, getDatabase } from './services/mongodb';
 import { Member } from './dag/membertype';
+import { Family } from './data/family';
 
 const app = express();
 const port = 3012;
 
+const family = new Family();
+
 app.use(express.json());
 
-app.post('/family', async (req: Request, res: Response) => {
-    const db = getDatabase();
-    const familyCollection = db.collection('FamilyTree');
-    const newMember: Member = req.body;
 
-    try {
-        const result = await familyCollection.insertOne(newMember);
-        res.status(201).json(result);
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to insert new member' });
-    }
-});
-
-app.get('/family', async (req: Request, res: Response) => {
-  const db = getDatabase();
-  const familyCollection = db.collection('FamilyTree');
-  console.log(req);
+app.post('/family/addMember', async (req: Request, res: Response) => {
+  const newMember: Member = req.body;
 
   try {
-    const members = await familyCollection.find().toArray();
-    res.status(200).json(members);
+    family.addMember(newMember).then(() => {
+      res.status(200).json({ message: 'New member added' });
+    })
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to insert new member' });
+  }
+});
+
+app.get(`/family/getMemberById`, async (req: Request, res: Response) => {
+  try {
+    family.getMember(req.query.id).then((member) => {
+      if (!member) {
+        res.status(404).json({ error: 'Member not found' });
+      }
+      res.status(200).json(member);
+    });
   } catch (error) {
     res.status(500).json({ error: 'Failed to retrieve family members' });
   }
 });
 
-connectToDatabase().then(() => {
-  app.listen(port, () => {
-    console.log(`Server is running on http://localhost:${port}`);
-  });
+
+
+app.listen(port, () => {
+  console.log(`Server is running on http://localhost:${port}`);
 });
+

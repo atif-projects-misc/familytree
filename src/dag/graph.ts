@@ -1,43 +1,60 @@
 import { Member } from './membertype';
+import { connectToDatabase, getDatabase } from '../services/mongodb';
 
 export class Graph {
     private nodes: Map<string, Node>;
+    private database: any; // Replace 'any' with the appropriate type for your MongoDB database
 
     constructor() {
         this.nodes = new Map<string, Node>();
+        this.database = null;
     }
 
-    public addNode(member: Member, uniqueId: string): void {
-        const node = new Node(member, uniqueId);
-        this.nodes.set(uniqueId, node);
+    public async initializeDatabase(): Promise<void> {
+        await connectToDatabase(); // Connect to the MongoDB database
+        this.database = getDatabase(); // Get the database instance
     }
 
-    public getNode(uniqueId: string): Node | undefined {
-        return this.nodes.get(uniqueId);
+    public async addNode(member: Member, _id: string): Promise<void> {
+        const node = new Node(member, _id);
+        this.nodes.set(_id, node);
+        await this.saveNodeToDatabase(node);
     }
 
-    public addEdge(sourceId: string, targetId: string, relationship: number): void {
+    public async getNode(uniqueId: string): Promise<Node | undefined> {
+        if (this.database) {
+            const nodeData = await this.database.collection('FamilyTree').findOne({ _id: uniqueId });
+            if (nodeData) {
+                return nodeData;
+            }
+        }
+        return undefined;
+    }
+
+    public async addEdge(sourceId: string, targetId: string, relationship: number): Promise<void> {
         const sourceNode = this.nodes.get(sourceId);
         const targetNode = this.nodes.get(targetId);
 
         if (sourceNode && targetNode) {
             sourceNode.addEdge(targetNode, relationship);
             targetNode.addEdge(sourceNode, relationship);
+            await this.saveEdgeToDatabase(sourceNode, targetNode, relationship);
         }
     }
 
-    public removeEdge(sourceId: string, targetId: string): void {
+    public async removeEdge(sourceId: string, targetId: string): Promise<void> {
         const sourceNode = this.nodes.get(sourceId);
         const targetNode = this.nodes.get(targetId);
 
         if (sourceNode && targetNode) {
             sourceNode.removeEdge(targetNode);
             targetNode.removeEdge(sourceNode);
+            await this.deleteEdgeFromDatabase(sourceNode, targetNode);
         }
     }
     
-    public removeNode(uniqueId: string): void {
-        const nodeToRemove = this.nodes.get(uniqueId);
+    public async removeNode(_id: string): Promise<void> {
+        const nodeToRemove = this.nodes.get(_id);
         if (nodeToRemove) {
             // Remove the node from all other nodes' edges
             this.nodes.forEach(node => {
@@ -45,19 +62,55 @@ export class Graph {
             });
 
             // Remove the node from the graph
-            this.nodes.delete(uniqueId);
+            this.nodes.delete(_id);
+
+            await this.deleteNodeFromDatabase(nodeToRemove);
+        }
+    }
+
+    private async saveNodeToDatabase(node: Node): Promise<void> {
+        if (this.database) {
+            // Save the node to the 'FamilyTree' collection in the database
+            await this.database.collection('FamilyTree').insertOne(node);
+        }
+    }
+
+    private async saveEdgeToDatabase(sourceNode: Node, targetNode: Node, relationship: number): Promise<void> {
+        if (this.database) {
+            // Save the edge to the 'FamilyTree' collection in the database
+            await this.database.collection('FamilyTree').updateOne(
+                { _id: sourceNode._id },
+                { $push: { edges: { node: targetNode, relationship: relationship } } }
+            );
+        }
+    }
+
+    private async deleteEdgeFromDatabase(sourceNode: Node, targetNode: Node): Promise<void> {
+        if (this.database) {
+            // Delete the edge from the 'FamilyTree' collection in the database
+            await this.database.collection('FamilyTree').updateOne(
+                { _id: sourceNode._id },
+                { $pull: { edges: { node: targetNode } } }
+            );
+        }
+    }
+
+    private async deleteNodeFromDatabase(node: Node): Promise<void> {
+        if (this.database) {
+            // Delete the node from the 'FamilyTree' collection in the database
+            await this.database.collection('FamilyTree').deleteOne({ _id: node._id });
         }
     }
 }
 
 export class Node {
     public member: Member;
-    public uniqueId: string;
+    public _id: string;
     public edges: Edge[];
 
-    constructor(member: Member, uniqueId: string) {
+    constructor(member: Member, _id: string) {
         this.member = member;
-        this.uniqueId = uniqueId;
+        this._id = _id;
         this.edges = [];
     }
 

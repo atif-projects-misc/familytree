@@ -7,6 +7,9 @@ const client = new MongoClient(uri);
 let db: any;
 
 export const connectToDatabase = async () => {
+  if (db) {
+    return;
+  }
   try {
     await client.connect();
     db = client.db('local');
