@@ -8,4 +8,5 @@ export interface Member {
     place_of_death?: string;
     date_of_marriage?: Date;
     description?: string;
+    generation?: number;
 }

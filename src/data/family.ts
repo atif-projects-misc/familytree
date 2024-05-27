@@ -8,11 +8,11 @@ export class Family {
         this.family = new Graph();
     }
 
-    public async addMember(member: Member, prevMember?: Member, relationship?: number): Promise<void> {
+    public async addMember(member: Member, prevMember?: string, relationship?: number): Promise<void> {
         await this.family.initializeDatabase();
-        this.family.addNode(member, member._id);
+        await this.family.addNode(member, member._id);
         if (prevMember && relationship)
-            this.family.addEdge(member._id, prevMember._id, relationship);
+            await this.family.addEdge(member._id, prevMember, relationship);
     }
 
     public async getMember(uniqueId: string): Promise<Member | undefined> {

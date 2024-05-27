@@ -13,6 +13,7 @@ export class Graph {
     public async initializeDatabase(): Promise<void> {
         await connectToDatabase(); // Connect to the MongoDB database
         this.database = getDatabase(); // Get the database instance
+        await this.updateNodesFromDatabase(); // Update nodes from the database
     }
 
     public async addNode(member: Member, _id: string): Promise<void> {
@@ -37,7 +38,7 @@ export class Graph {
 
         if (sourceNode && targetNode) {
             sourceNode.addEdge(targetNode, relationship);
-            targetNode.addEdge(sourceNode, relationship);
+            targetNode.addEdge(sourceNode, relationship * -1);
             await this.saveEdgeToDatabase(sourceNode, targetNode, relationship);
         }
     }
@@ -52,7 +53,7 @@ export class Graph {
             await this.deleteEdgeFromDatabase(sourceNode, targetNode);
         }
     }
-    
+
     public async removeNode(_id: string): Promise<void> {
         const nodeToRemove = this.nodes.get(_id);
         if (nodeToRemove) {
@@ -77,10 +78,27 @@ export class Graph {
 
     private async saveEdgeToDatabase(sourceNode: Node, targetNode: Node, relationship: number): Promise<void> {
         if (this.database) {
+            // Exclude circular references from the edge data
+            const sourceEdgeData = {
+                _id: targetNode._id,
+                relationship: relationship
+            };
+
+            const targetNodeRelationship = relationship * -1;
+            const targetEdgeData = {
+                _id: sourceNode._id,
+                relationship: targetNodeRelationship
+            };
+
             // Save the edge to the 'FamilyTree' collection in the database
             await this.database.collection('FamilyTree').updateOne(
                 { _id: sourceNode._id },
-                { $push: { edges: { node: targetNode, relationship: relationship } } }
+                { $push: { edges: sourceEdgeData } }
+            );
+
+            await this.database.collection('FamilyTree').updateOne(
+                { _id: targetNode._id },
+                { $push: { edges: targetEdgeData } }
             );
         }
     }
@@ -101,6 +119,23 @@ export class Graph {
             await this.database.collection('FamilyTree').deleteOne({ _id: node._id });
         }
     }
+
+    private async updateNodesFromDatabase(): Promise<void> {
+        if (this.database) {
+            const nodesData = await this.database.collection('FamilyTree').find().toArray();
+            this.nodes.clear();
+            nodesData.forEach(nodeData => {
+                const node = new Node(nodeData.member, nodeData._id);
+                nodeData.edges.forEach((edgeData: any) => {
+                    const targetNode = this.nodes.get(edgeData.node._id);
+                    if (targetNode) {
+                        node.addEdge(targetNode, edgeData.relationship);
+                    }
+                });
+                this.nodes.set(nodeData._id, node);
+            });
+        }
+    }
 }
 
 export class Node {
@@ -115,18 +150,18 @@ export class Node {
     }
 
     public addEdge(node: Node, relationship: number): void {
-        this.edges.push(new Edge(node, relationship));
+        this.edges.push(new Edge(node._id, relationship));
     }
 
     changeEdge(node: Node, relationship: number): void {
-        const index = this.edges.findIndex(edge => edge.node === node);
+        const index = this.edges.findIndex(edge => edge._id === node._id);
         if (index > -1) {
             this.edges[index].relationship = relationship;
         }
     }
 
     public removeEdge(node: Node): void {
-        const index = this.edges.findIndex(edge => edge.node === node);
+        const index = this.edges.findIndex(edge => edge._id === node._id);
         if (index > -1) {
             this.edges.splice(index, 1);
         }
@@ -134,11 +169,11 @@ export class Node {
 }
 
 class Edge {
-    public node: Node;
+    public _id: string;
     public relationship: number;
 
-    constructor(node: Node, relationship: number) {
-        this.node = node;
+    constructor(_id: string, relationship: number) {
+        this._id = _id;
         this.relationship = relationship;
     }
 }

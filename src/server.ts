@@ -11,10 +11,12 @@ app.use(express.json());
 
 
 app.post('/family/addMember', async (req: Request, res: Response) => {
-  const newMember: Member = req.body;
-
+  const newMember: Member = req.body.member;
+  newMember.generation = await family.getMember(req.body?.prevMember).then((member) => {
+    return member?.generation + req.body?.relationship;
+  });
   try {
-    family.addMember(newMember).then(() => {
+    family.addMember(newMember, req.body?.prevMember, req.body?.relationship).then(() => {
       res.status(200).json({ message: 'New member added' });
     })
   } catch (error) {
