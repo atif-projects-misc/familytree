@@ -8,4 +8,6 @@ Steps to run locally:
 
 3. Run `npm install` to install all dependencies.
 
-4. Run `npm run build && npm run start` to build and run the backend locally. Default port is 3012
+4. Run `npm run build && npm run start` to build and run the backend locally. Default port is 3012.
+
+5. A local instance of MongoDB running on port 27017 is required.

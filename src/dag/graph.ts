@@ -68,8 +68,9 @@ export class Graph {
         const nodeToRemove = this.nodes.get(_id);
         if (nodeToRemove) {
             // Remove the node from all other nodes' edges
-            this.nodes.forEach(node => {
+            this.nodes.forEach(async (node) => {
                 node.removeEdge(nodeToRemove);
+                await this.deleteEdgeFromDatabase(node, nodeToRemove);
             });
 
             // Remove the node from the graph
@@ -118,7 +119,7 @@ export class Graph {
             // Delete the edge from the 'FamilyTree' collection in the database
             await this.database.collection('FamilyTree').updateOne(
                 { _id: sourceNode._id },
-                { $pull: { edges: { node: targetNode } } }
+                { $pull: { edges: { _id: targetNode._id } } }
             );
         }
     }

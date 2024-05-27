@@ -52,7 +52,7 @@ app.get(`/family/getMemberById`, async (req: Request, res: Response) => {
 
 app.get(`/family/getMemberByParam`, async (req: Request, res: Response) => {
   try {
-    family.getMembersByName(req.query.param, req.query.param_value).then((members) => {
+    family.getMembersByParams(req.query.param, req.query.param_value).then((members) => {
       if (!members) {
         res.status(404).json({ error: 'Member(s) not found' });
       }
@@ -63,7 +63,25 @@ app.get(`/family/getMemberByParam`, async (req: Request, res: Response) => {
   }
 });
 
+app.delete(`/family/removeMember`, async (req: Request, res: Response) => {
+  try {
+    family.removeMember(req.query.id).then(() => {
+      res.status(200).json({ message: 'Member removed' });
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to remove member' });
+  }
+});
 
+app.delete(`/family/removeRelationship`, async (req: Request, res: Response) => {
+  try {
+    family.removeRelationship(req.query.source, req.query.target).then(() => {
+      res.status(200).json({ message: 'Relationship removed' });
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to remove relationship' });
+  }
+});
 
 app.listen(port, () => {
   console.log(`Server is running on http://localhost:${port}`);
