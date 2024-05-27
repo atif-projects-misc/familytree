@@ -1,9 +1,10 @@
 // src/mongodb.ts
 import { MongoClient } from 'mongodb';
+import { Settings } from '../Settings';
 
-const uri = 'mongodb://127.0.0.1:27017';
-const client = new MongoClient(uri);
+const client = new MongoClient(Settings.MongoDbUrl);
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let db: any;
 
 export const connectToDatabase = async () => {
@@ -12,7 +13,7 @@ export const connectToDatabase = async () => {
   }
   try {
     await client.connect();
-    db = client.db('local');
+    db = client.db(Settings.dbName);
     console.log('Connected to database');
   } catch (error) {
     console.error('Could not connect to database', error);

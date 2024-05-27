@@ -1,8 +1,11 @@
 import { Member } from './membertype';
 import { connectToDatabase, getDatabase } from '../services/mongodb';
+import { Settings } from '../Settings';
+import { ObjectId } from 'mongodb';
 
 export class Graph {
     private nodes: Map<string, Node>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private database: any; // Replace 'any' with the appropriate type for your MongoDB database
 
     constructor() {
@@ -16,15 +19,18 @@ export class Graph {
         await this.updateNodesFromDatabase(); // Update nodes from the database
     }
 
-    public async addNode(member: Member, _id: string): Promise<void> {
-        const node = new Node(member, _id);
-        this.nodes.set(_id, node);
-        await this.saveNodeToDatabase(node);
+    public async addNode(member: Member): Promise<ObjectId> {
+        const node = new Node(member);
+        const _id = await this.saveNodeToDatabase(node);
+        node.setId(_id.toString());
+        this.nodes.set(node._id || '', node);
+        return _id;
     }
 
     public async getNode(uniqueId: string): Promise<Node | undefined> {
         if (this.database) {
-            const nodeData = await this.database.collection('FamilyTree').findOne({ _id: uniqueId });
+            const obj = new ObjectId(uniqueId);
+            const nodeData = await this.database.collection(Settings.collectionName).findOne({ _id: obj });
             if (nodeData) {
                 return nodeData;
             }
@@ -34,12 +40,16 @@ export class Graph {
 
     public async getNodebyParam(param: string, param_value: string): Promise<Array<Node>> {
         if (this.database) {
-            const nodeData = await this.database.collection('FamilyTree').find({ [`member.${param}`]: { $regex: param_value, $options: 'i' } }).toArray();
+            const nodeData = await this.database.collection(Settings.collectionName).find({ [`member.${param}`]: { $regex: param_value, $options: 'i' } }).toArray();
             if (nodeData) {
                 return nodeData;
             }
         }
         return [];
+    }
+
+    public async getAllNodes(): Promise<Map<string, Node>> {
+        return this.nodes;
     }
 
     public async addEdge(sourceId: string, targetId: string, relationship: number): Promise<void> {
@@ -80,16 +90,17 @@ export class Graph {
         }
     }
 
-    private async saveNodeToDatabase(node: Node): Promise<void> {
+    private async saveNodeToDatabase(node: Node): Promise<ObjectId> {
         if (this.database) {
-            // Save the node to the 'FamilyTree' collection in the database
-            await this.database.collection('FamilyTree').insertOne(node);
+            // Save the node to the Settings.collectionName collection in the database
+            const result = await this.database.collection(Settings.collectionName).insertOne(node);
+            return result.insertedId;
         }
+        return new ObjectId();
     }
 
     private async saveEdgeToDatabase(sourceNode: Node, targetNode: Node, relationship: number): Promise<void> {
         if (this.database) {
-            // Exclude circular references from the edge data
             const sourceEdgeData = {
                 _id: targetNode._id,
                 relationship: relationship
@@ -101,14 +112,16 @@ export class Graph {
                 relationship: targetNodeRelationship
             };
 
-            // Save the edge to the 'FamilyTree' collection in the database
-            await this.database.collection('FamilyTree').updateOne(
-                { _id: sourceNode._id },
+            // Save the edge to the Settings.collectionName collection in the database
+            let obj = new ObjectId(sourceNode._id);
+            await this.database.collection(Settings.collectionName).updateOne(
+                { _id: obj },
                 { $push: { edges: sourceEdgeData } }
             );
 
-            await this.database.collection('FamilyTree').updateOne(
-                { _id: targetNode._id },
+            obj = new ObjectId(targetNode._id);
+            await this.database.collection(Settings.collectionName).updateOne(
+                { _id: obj },
                 { $push: { edges: targetEdgeData } }
             );
         }
@@ -116,27 +129,30 @@ export class Graph {
 
     private async deleteEdgeFromDatabase(sourceNode: Node, targetNode: Node): Promise<void> {
         if (this.database) {
-            // Delete the edge from the 'FamilyTree' collection in the database
-            await this.database.collection('FamilyTree').updateOne(
+            // Delete the edge from the Settings.collectionName collection in the database
+            const obj = new ObjectId(targetNode._id);
+            await this.database.collection(Settings.collectionName).updateOne(
                 { _id: sourceNode._id },
-                { $pull: { edges: { _id: targetNode._id } } }
+                { $pull: { edges: { _id: obj } } }
             );
         }
     }
 
     private async deleteNodeFromDatabase(node: Node): Promise<void> {
         if (this.database) {
-            // Delete the node from the 'FamilyTree' collection in the database
-            await this.database.collection('FamilyTree').deleteOne({ _id: node._id });
+            const obj = new ObjectId(node._id);
+            // Delete the node from the Settings.collectionName collection in the database
+            await this.database.collection(Settings.collectionName).deleteOne({ _id: obj });
         }
     }
 
     private async updateNodesFromDatabase(): Promise<void> {
         if (this.database) {
-            const nodesData = await this.database.collection('FamilyTree').find().toArray();
+            const nodesData = await this.database.collection(Settings.collectionName).find().toArray();
             this.nodes.clear();
             nodesData.forEach(nodeData => {
-                const node = new Node(nodeData.member, nodeData._id);
+                const node = new Node(nodeData.member);
+                node._id = nodeData._id.toString();
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 nodeData.edges.forEach((edgeData: any) => {
                     const targetNode = this.nodes.get(edgeData?._id);
@@ -144,7 +160,7 @@ export class Graph {
                         node.addEdge(targetNode, edgeData.relationship);
                     }
                 });
-                this.nodes.set(nodeData._id, node);
+                this.nodes.set(nodeData._id.toString(), node);
             });
         }
     }
@@ -152,17 +168,22 @@ export class Graph {
 
 export class Node {
     public member: Member;
-    public _id: string;
+    public _id?: string;
     public edges: Edge[];
 
-    constructor(member: Member, _id: string) {
+    constructor(member: Member) {
         this.member = member;
-        this._id = _id;
         this.edges = [];
+        this._id = member._id;
+    }
+
+    public setId(_id: string): void {
+        this._id = _id;
     }
 
     public addEdge(node: Node, relationship: number): void {
         if (!this.edges.some(edge => edge._id === node._id)) {
+            if (node._id)
             this.edges.push(new Edge(node._id, relationship));
         }
     }

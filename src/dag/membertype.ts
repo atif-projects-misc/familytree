@@ -1,5 +1,5 @@
 export interface Member {
-    _id: string;
+    _id?: string;
     name?: string;
     gender?: string;
     date_of_birth?: Date;
@@ -9,4 +9,5 @@ export interface Member {
     date_of_marriage?: Date;
     description?: string;
     generation?: number;
+    images?: string[];
 }
