@@ -32,6 +32,16 @@ export class Graph {
         return undefined;
     }
 
+    public async getNodebyParam(param: string, param_value: string): Promise<Array<Node>> {
+        if (this.database) {
+            const nodeData = await this.database.collection('FamilyTree').find({ [`member.${param}`]: { $regex: param_value, $options: 'i' } }).toArray();
+            if (nodeData) {
+                return nodeData;
+            }
+        }
+        return [];
+    }
+
     public async addEdge(sourceId: string, targetId: string, relationship: number): Promise<void> {
         const sourceNode = this.nodes.get(sourceId);
         const targetNode = this.nodes.get(targetId);
@@ -126,8 +136,9 @@ export class Graph {
             this.nodes.clear();
             nodesData.forEach(nodeData => {
                 const node = new Node(nodeData.member, nodeData._id);
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 nodeData.edges.forEach((edgeData: any) => {
-                    const targetNode = this.nodes.get(edgeData.node._id);
+                    const targetNode = this.nodes.get(edgeData?._id);
                     if (targetNode) {
                         node.addEdge(targetNode, edgeData.relationship);
                     }
@@ -150,7 +161,9 @@ export class Node {
     }
 
     public addEdge(node: Node, relationship: number): void {
-        this.edges.push(new Edge(node._id, relationship));
+        if (!this.edges.some(edge => edge._id === node._id)) {
+            this.edges.push(new Edge(node._id, relationship));
+        }
     }
 
     changeEdge(node: Node, relationship: number): void {
