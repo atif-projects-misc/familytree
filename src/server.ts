@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express';
 import { Member } from './dag/membertype';
 import { Family } from './data/family';
+import cors from 'cors';
 
 const app = express();
 const port = 3012;
@@ -8,6 +9,7 @@ const port = 3012;
 const family = new Family();
 
 app.use(express.json());
+app.use(cors()); // Add this line to enable CORS
 
 
 app.post('/family/addMember', async (req: Request, res: Response) => {
@@ -67,14 +69,27 @@ app.get(`/family/getMemberByParam`, async (req: Request, res: Response) => {
 
 app.get(`/family/getAllMembers`, async (_req: Request, res: Response) => {
   try {
-    family.getAllMembers().then((members) => {
-      if (!members) {
+    family.getAllMembers().then((nodes) => {
+      if (!nodes) {
         res.status(404).json({ error: 'Members not found' });
       }
-      res.status(200).json(members);
+      res.status(200).json(nodes);
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to retrieve family members' });
+  }
+});
+
+app.get(`/family/getAllRelationships`, async (_req: Request, res: Response) => {
+  try {
+    family.getAllRelationships().then((edges) => {
+      if (!edges) {
+        res.status(404).json({ error: 'Members not found' });
+      }
+      res.status(200).json(edges);
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to retrieve relationships' });
   }
 });
 

@@ -4,26 +4,20 @@ import { Settings } from '../Settings';
 import { ObjectId } from 'mongodb';
 
 export class Graph {
-    private nodes: Map<string, Node>;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    private database: any; // Replace 'any' with the appropriate type for your MongoDB database
+    private database: any;
 
     constructor() {
-        this.nodes = new Map<string, Node>();
         this.database = null;
     }
 
     public async initializeDatabase(): Promise<void> {
         await connectToDatabase(); // Connect to the MongoDB database
         this.database = getDatabase(); // Get the database instance
-        await this.updateNodesFromDatabase(); // Update nodes from the database
     }
 
     public async addNode(member: Member): Promise<ObjectId> {
         const node = new Node(member);
         const _id = await this.saveNodeToDatabase(node);
-        node.setId(_id.toString());
-        this.nodes.set(node._id || '', node);
         return _id;
     }
 
@@ -48,45 +42,60 @@ export class Graph {
         return [];
     }
 
-    public async getAllNodes(): Promise<Map<string, Node>> {
-        return this.nodes;
+    public async getAllNodes(): Promise<Node[]> {
+        await this.setNodeCoordinates();
+        if (this.database) {
+            const nodesData = await this.database.collection(Settings.collectionName).find().toArray();
+            return nodesData;
+        }
+        return [];
+    }
+
+    public async removeNode(_id: string): Promise<void> {
+        const nodeToRemove = await this.getNode(_id);
+        if (nodeToRemove) {
+            await this.deleteNodeFromDatabase(nodeToRemove);
+        }
     }
 
     public async addEdge(sourceId: string, targetId: string, relationship: number): Promise<void> {
-        const sourceNode = this.nodes.get(sourceId);
-        const targetNode = this.nodes.get(targetId);
+        if (relationship > 0) {
+            const temp = sourceId;
+            sourceId = targetId;
+            targetId = temp;
+        }
+
+        const sourceNode = await this.getNode(sourceId);
+        const targetNode = await this.getNode(targetId);
 
         if (sourceNode && targetNode) {
-            sourceNode.addEdge(targetNode, relationship);
-            targetNode.addEdge(sourceNode, relationship * -1);
             await this.saveEdgeToDatabase(sourceNode, targetNode, relationship);
         }
     }
 
-    public async removeEdge(sourceId: string, targetId: string): Promise<void> {
-        const sourceNode = this.nodes.get(sourceId);
-        const targetNode = this.nodes.get(targetId);
-
-        if (sourceNode && targetNode) {
-            sourceNode.removeEdge(targetNode);
-            targetNode.removeEdge(sourceNode);
-            await this.deleteEdgeFromDatabase(sourceNode, targetNode);
+    public async getEdge(sourceId: string, targetId: string): Promise<Edge | undefined> {
+        if (this.database) {
+            const edgeData = await this.database.collection(Settings.relationshipCollectionName).findOne({ source: sourceId, target: targetId });
+            if (edgeData) {
+                return new Edge(edgeData._id, edgeData.relationship, sourceId, targetId);
+            }
         }
+        return undefined;
     }
 
-    public async removeNode(_id: string): Promise<void> {
-        const nodeToRemove = this.nodes.get(_id);
-        if (nodeToRemove) {
-            // Remove the node from all other nodes' edges
-            this.nodes.forEach(async (node) => {
-                node.removeEdge(nodeToRemove);
-                await this.deleteEdgeFromDatabase(node, nodeToRemove);
-            });
+    public async getAllEdges(): Promise<Edge[]> {
+        if (this.database) {
+            const edgesData = await this.database.collection(Settings.relationshipCollectionName).find().toArray();
+            return edgesData;
+        }
+        return [];
+    }
 
-            // Remove the node from the graph
-            this.nodes.delete(_id);
+    public async removeEdge(sourceId: string, targetId: string): Promise<void> {
+        const edge = await this.getEdge(sourceId, targetId);
 
-            await this.deleteNodeFromDatabase(nodeToRemove);
+        if (edge?._id) {
+            await this.deleteEdgeFromDatabase(edge._id);
         }
     }
 
@@ -101,40 +110,16 @@ export class Graph {
 
     private async saveEdgeToDatabase(sourceNode: Node, targetNode: Node, relationship: number): Promise<void> {
         if (this.database) {
-            const sourceEdgeData = {
-                _id: targetNode._id,
-                relationship: relationship
-            };
-
-            const targetNodeRelationship = relationship * -1;
-            const targetEdgeData = {
-                _id: sourceNode._id,
-                relationship: targetNodeRelationship
-            };
-
-            // Save the edge to the Settings.collectionName collection in the database
-            let obj = new ObjectId(sourceNode._id);
-            await this.database.collection(Settings.collectionName).updateOne(
-                { _id: obj },
-                { $push: { edges: sourceEdgeData } }
-            );
-
-            obj = new ObjectId(targetNode._id);
-            await this.database.collection(Settings.collectionName).updateOne(
-                { _id: obj },
-                { $push: { edges: targetEdgeData } }
-            );
+            // Save the edge to the Settings.relationshipCollectionName collection in the database
+            const edge = new Edge(relationship, sourceNode._id?.toString(), targetNode._id?.toString());
+            await this.database.collection(Settings.relationshipCollectionName).insertOne(edge);
         }
     }
 
-    private async deleteEdgeFromDatabase(sourceNode: Node, targetNode: Node): Promise<void> {
+    private async deleteEdgeFromDatabase(edgeId: string): Promise<void> {
         if (this.database) {
             // Delete the edge from the Settings.collectionName collection in the database
-            const obj = new ObjectId(targetNode._id);
-            await this.database.collection(Settings.collectionName).updateOne(
-                { _id: sourceNode._id },
-                { $pull: { edges: { _id: obj } } }
-            );
+            await this.database.collection(Settings.relationshipCollectionName).deleteOne({ _id: new ObjectId(edgeId) });
         }
     }
 
@@ -146,22 +131,39 @@ export class Graph {
         }
     }
 
-    private async updateNodesFromDatabase(): Promise<void> {
+    // Function to access and analyze the nodes and edges and set the x and y coordinates of each node
+    // such that when the nodes are displayed on a screen, the nodes of the same generation are in
+    // one horizontal line with lower numbered generations obove the higher numbered generations.
+    // Within a generation, the x value should be such that the nodes are evenly spaced. Save the
+    // updated nodes with x and y values to the database. Keep in mind the genration number could go in negatives as well
+
+    private async setNodeCoordinates(): Promise<void> {
         if (this.database) {
-            const nodesData = await this.database.collection(Settings.collectionName).find().toArray();
-            this.nodes.clear();
-            nodesData.forEach(nodeData => {
-                const node = new Node(nodeData.member);
-                node._id = nodeData._id.toString();
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                nodeData.edges.forEach((edgeData: any) => {
-                    const targetNode = this.nodes.get(edgeData?._id);
-                    if (targetNode) {
-                        node.addEdge(targetNode, edgeData.relationship);
-                    }
-                });
-                this.nodes.set(nodeData._id.toString(), node);
-            });
+            const nodes = await this.database.collection(Settings.collectionName).find().toArray();
+            // const edges = await this.database.collection(Settings.relationshipCollectionName).find().toArray();
+
+            // Sort the nodes by generation
+            nodes.sort((a, b) => (a.member.generation ?? 0) - (b.member.generation ?? 0));
+
+            // Set the x and y coordinates of each node
+            let x = 100;
+            let y = 100;
+            let prevGen = nodes[0].member.generation;
+            for (let i = 0; i < nodes.length; i++) {
+                if (prevGen !== nodes[i].member.generation) {
+                    y += 100;
+                    x = 100;
+                    prevGen = nodes[i].member.generation;
+                }
+                nodes[i].x = x;
+                nodes[i].y = y;
+                x += 100;
+            }
+
+            // Save the updated nodes with x and y values to the database
+            for (let i = 0; i < nodes.length; i++) {
+                await this.database.collection(Settings.collectionName).updateOne({ _id: nodes[i]._id }, { $set: { x: nodes[i].x, y: nodes[i].y } });
+            }
         }
     }
 }
@@ -169,46 +171,27 @@ export class Graph {
 export class Node {
     public member: Member;
     public _id?: string;
-    public edges: Edge[];
+    public x?: number;
+    public y?: number;
 
-    constructor(member: Member) {
+    constructor(member: Member, x?: number, y?: number) {
         this.member = member;
-        this.edges = [];
         this._id = member._id;
-    }
-
-    public setId(_id: string): void {
-        this._id = _id;
-    }
-
-    public addEdge(node: Node, relationship: number): void {
-        if (!this.edges.some(edge => edge._id === node._id)) {
-            if (node._id)
-            this.edges.push(new Edge(node._id, relationship));
-        }
-    }
-
-    changeEdge(node: Node, relationship: number): void {
-        const index = this.edges.findIndex(edge => edge._id === node._id);
-        if (index > -1) {
-            this.edges[index].relationship = relationship;
-        }
-    }
-
-    public removeEdge(node: Node): void {
-        const index = this.edges.findIndex(edge => edge._id === node._id);
-        if (index > -1) {
-            this.edges.splice(index, 1);
-        }
+        this.x = x;
+        this.y = y;
     }
 }
 
-class Edge {
-    public _id: string;
+export class Edge {
+    public _id?: string;
     public relationship: number;
+    public source?: string;
+    public target?: string;
 
-    constructor(_id: string, relationship: number) {
-        this._id = _id;
+    constructor(relationship: number, source?: string, target?: string, _id?: string) {
         this.relationship = relationship;
+        this.source = source;
+        this.target = target;
+        this._id = _id;
     }
 }

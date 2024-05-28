@@ -1,5 +1,5 @@
 import { Member } from '../dag/membertype';
-import { Graph } from '../dag/graph';
+import { Edge, Graph, Node } from '../dag/graph';
 import { ObjectId } from 'mongodb';
 
 export class Family {
@@ -45,9 +45,15 @@ export class Family {
         return nodes.map(node => node.member);
     }
 
-    public async getAllMembers(): Promise<Array<Member>> {
+    public async getAllMembers(): Promise<Node[]> {
         await this.family.initializeDatabase();
         const nodes = await this.family.getAllNodes();
-        return Array.from(nodes.values()).map(node => node.member);
+        return nodes;
     }
+
+    public async getAllRelationships(): Promise<Edge[]> {
+        await this.family.initializeDatabase();
+        const edges = await this.family.getAllEdges();
+        return edges;
+      }
 }
