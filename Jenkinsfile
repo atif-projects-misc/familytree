@@ -22,6 +22,8 @@ pipeline {
         }
         stage('Build Docker Image') {
             steps {
+                sh 'docker context ls'
+                sh 'docker context use default'
                 sh 'docker build -t familytree .'
             }
         }
