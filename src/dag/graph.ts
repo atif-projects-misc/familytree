@@ -157,7 +157,7 @@ export class Graph {
                 }
                 nodes[i].x = x;
                 nodes[i].y = y;
-                x += 100;
+                x += 500;
             }
 
             // Save the updated nodes with x and y values to the database
