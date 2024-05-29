@@ -1,14 +1,12 @@
 pipeline {
     agent any
+    tools {
+        nodejs 'NodeJS 22.2.2'
+    }
     stages {
         stage('Checkout') {
             steps {
                 checkout scm
-            }
-        }
-        stage('Install') {
-            steps {
-                sh 'sudo apt install npm'
             }
         }
         stage('build') {
