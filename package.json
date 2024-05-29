@@ -22,10 +22,6 @@
   },
   "homepage": "https://github.com/atifhaque01/familytree#readme",
   "devDependencies": {
-    "@eslint/compat": "^1.0.1",
-    "@eslint/js": "^9.3.0",
-    "eslint": "^9.3.0",
-    "eslint-plugin-react": "^7.34.1",
     "express": "^4.19.2",
     "globals": "^15.3.0",
     "rimraf": "^5.0.7",
@@ -34,6 +30,7 @@
     "typescript-eslint": "^7.10.0"
   },
   "dependencies": {
+    "cors": "^2.8.5",
     "mongodb": "^6.6.2"
   }
 }
