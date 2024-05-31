@@ -27,12 +27,12 @@ pipeline {
         }
         stage('Docker Push') {
             steps {
+                sh "docker tag familytree:1.0 $DOCKERHUB/familytree:1.0"
                 withCredentials([usernamePassword(credentialsId: 'docker_cred', passwordVariable: 'DOCKERHUB_PASSWORD', usernameVariable: 'DOCKERHUB_USERNAME')]) {
                     sh "docker login -u $DOCKERHUB_USERNAME -p $DOCKERHUB_PASSWORD"
-                    sh "docker tag familytree:1.0 $DOCKERHUB/familytree:1.0"
-                    sh "docker push $DOCKERHUB/familytree:1.0"
-                    sh "docker logout"
                 }
+                sh "docker push $DOCKERHUB/familytree:1.0"
+                sh "docker logout"
             }
         }
     }
