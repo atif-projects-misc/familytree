@@ -31,6 +31,7 @@
   },
   "dependencies": {
     "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
     "mongodb": "^6.6.2"
   }
 }

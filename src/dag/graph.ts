@@ -2,6 +2,7 @@ import { Member } from './membertype';
 import { connectToDatabase, getDatabase } from '../services/mongodb';
 import { Settings } from '../Settings';
 import { ObjectId } from 'mongodb';
+import { Relationship } from './relationshiptype';
 
 export class Graph {
     private database: any;
@@ -15,7 +16,7 @@ export class Graph {
         this.database = getDatabase(); // Get the database instance
     }
 
-    public async addNode(member: Member): Promise<ObjectId> {
+    public async addNode(member: Member): Promise<String | undefined> {
         const node = new Node(member);
         const _id = await this.saveNodeToDatabase(node);
         return _id;
@@ -43,10 +44,18 @@ export class Graph {
     }
 
     public async getAllNodes(): Promise<Node[]> {
-        await this.setNodeCoordinates();
         if (this.database) {
-            const nodesData = await this.database.collection(Settings.collectionName).find().toArray();
-            return nodesData;
+            try {
+                const nodesData = await this.database.collection(Settings.collectionName).find().toArray();
+                return nodesData.map((node: any) => {
+                    node.id = node._id.toString();
+                    delete node._id;
+                    return node;
+                });
+            } catch (error) {
+                console.error('Error fetching all nodes from database:', error);
+                return [];
+            }
         }
         return [];
     }
@@ -58,26 +67,29 @@ export class Graph {
         }
     }
 
-    public async addEdge(sourceId: string, targetId: string, relationship: number): Promise<void> {
-        if (relationship > 0) {
-            const temp = sourceId;
-            sourceId = targetId;
-            targetId = temp;
+    public async updateNode(uniqueId: string, member: Member): Promise<void> {
+        if (this.database) {
+            const node = new Node(member);
+            await this.database.collection(Settings.collectionName).updateOne(
+                { _id: new ObjectId(uniqueId) },
+                { $set: { data: node.data } }
+            );
         }
+    }
 
-        const sourceNode = await this.getNode(sourceId);
-        const targetNode = await this.getNode(targetId);
-
-        if (sourceNode && targetNode) {
-            await this.saveEdgeToDatabase(sourceNode, targetNode, relationship);
+    public async addEdge(relationship: Relationship): Promise<void> {
+        if (relationship) {
+            await this.saveEdgeToDatabase(relationship);
         }
     }
 
     public async getEdge(sourceId: string, targetId: string): Promise<Edge | undefined> {
         if (this.database) {
-            const edgeData = await this.database.collection(Settings.relationshipCollectionName).findOne({ source: sourceId, target: targetId });
+            const edgeData = await this.database.collection(Settings.relationshipCollectionName).findOne({ fromId: sourceId, toId: targetId });
             if (edgeData) {
-                return new Edge(edgeData._id, edgeData.relationship, sourceId, targetId);
+                const edge = new Edge(edgeData.relationship, sourceId, targetId);
+                edge._id = edgeData._id.toString();
+                return edge;
             }
         }
         return undefined;
@@ -91,6 +103,13 @@ export class Graph {
         return [];
     }
 
+    public async findRelationships(query: Record<string, unknown>): Promise<Relationship[]> {
+        if (this.database) {
+            return await this.database.collection(Settings.relationshipCollectionName).find(query).toArray();
+        }
+        return [];
+    }
+
     public async removeEdge(sourceId: string, targetId: string): Promise<void> {
         const edge = await this.getEdge(sourceId, targetId);
 
@@ -99,21 +118,32 @@ export class Graph {
         }
     }
 
-    private async saveNodeToDatabase(node: Node): Promise<ObjectId> {
+    private async saveNodeToDatabase(node: Node): Promise<String | undefined> {
         if (this.database) {
             // Save the node to the Settings.collectionName collection in the database
-            const result = await this.database.collection(Settings.collectionName).insertOne(node);
-            return result.insertedId;
+            try {
+                const result = await this.database.collection(Settings.collectionName).insertOne(node);
+                return result.insertedId.toString();
+            } catch (error) {
+                console.error('Error saving node to database:', error);
+                return undefined;
+            }
         }
-        return new ObjectId();
+        return undefined;
     }
 
-    private async saveEdgeToDatabase(sourceNode: Node, targetNode: Node, relationship: number): Promise<void> {
+    private async saveEdgeToDatabase(relationship: Relationship): Promise<String | undefined> {
         if (this.database) {
             // Save the edge to the Settings.relationshipCollectionName collection in the database
-            const edge = new Edge(relationship, sourceNode._id?.toString(), targetNode._id?.toString());
-            await this.database.collection(Settings.relationshipCollectionName).insertOne(edge);
+            try {
+                const result = await this.database.collection(Settings.relationshipCollectionName).insertOne(relationship);
+                return result.insertedId.toString();
+            } catch (error) {
+                console.error('Error saving edge to database:', error);
+                return undefined;
+            }
         }
+        return undefined;
     }
 
     private async deleteEdgeFromDatabase(edgeId: string): Promise<void> {
@@ -130,55 +160,27 @@ export class Graph {
             await this.database.collection(Settings.collectionName).deleteOne({ _id: obj });
         }
     }
-
-    // Function to access and analyze the nodes and edges and set the x and y coordinates of each node
-    // such that when the nodes are displayed on a screen, the nodes of the same generation are in
-    // one horizontal line with lower numbered generations obove the higher numbered generations.
-    // Within a generation, the x value should be such that the nodes are evenly spaced. Save the
-    // updated nodes with x and y values to the database. Keep in mind the genration number could go in negatives as well
-
-    private async setNodeCoordinates(): Promise<void> {
-        if (this.database) {
-            const nodes = await this.database.collection(Settings.collectionName).find().toArray();
-            // const edges = await this.database.collection(Settings.relationshipCollectionName).find().toArray();
-
-            // Sort the nodes by generation
-            nodes.sort((a, b) => (a.member.generation ?? 0) - (b.member.generation ?? 0));
-
-            // Set the x and y coordinates of each node
-            let x = 100;
-            let y = 100;
-            let prevGen = nodes[0].member.generation;
-            for (let i = 0; i < nodes.length; i++) {
-                if (prevGen !== nodes[i].member.generation) {
-                    y += 100;
-                    x = 100;
-                    prevGen = nodes[i].member.generation;
-                }
-                nodes[i].x = x;
-                nodes[i].y = y;
-                x += 500;
-            }
-
-            // Save the updated nodes with x and y values to the database
-            for (let i = 0; i < nodes.length; i++) {
-                await this.database.collection(Settings.collectionName).updateOne({ _id: nodes[i]._id }, { $set: { x: nodes[i].x, y: nodes[i].y } });
-            }
-        }
-    }
 }
 
 export class Node {
-    public member: Member;
+    public data: Member;
     public _id?: string;
-    public x?: number;
-    public y?: number;
 
-    constructor(member: Member, x?: number, y?: number) {
-        this.member = member;
-        this._id = member._id;
-        this.x = x;
-        this.y = y;
+    constructor(member: Member) {
+        const memberData: Member = {
+            badges: member?.badges || [],
+            sex: member.sex,
+            subtitles: member?.subtitles || "",
+            title: member.title,
+            titleBgColor: member?.titleBgColor || "rgb(63, 108, 191)",
+            titleTextColor: member?.titleTextColor || "white",
+            imageUrl: member?.imageUrl || null
+        }
+        this.data = memberData;
+    }
+
+    public setId(uniqueId: string): void {
+        this._id = uniqueId;
     }
 }
 
