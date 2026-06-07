@@ -5,7 +5,7 @@
   "main": "./build/server.js",
   "scripts": {
     "test": "exit 0",
-    "build": "rimraf build/ && tsc --pretty",
+    "build": "npm install && rimraf build/ && tsc --pretty",
     "start": "node ./build/server"
   },
   "repository": {
