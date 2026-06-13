@@ -22,7 +22,6 @@
   },
   "homepage": "https://github.com/atifhaque01/familytree#readme",
   "devDependencies": {
-    "express": "^4.19.2",
     "globals": "^15.3.0",
     "rimraf": "^5.0.7",
     "ts-node": "^10.9.2",
@@ -30,6 +29,7 @@
     "typescript-eslint": "^7.10.0"
   },
   "dependencies": {
+    "express": "^4.19.2",
     "cors": "^2.8.5",
     "dotenv": "^17.4.2",
     "mongodb": "^6.6.2"

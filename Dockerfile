@@ -1,16 +1,23 @@
-FROM node:latest
+# Stage 1: compile TypeScript and install production deps
+FROM cgr.dev/chainguard/node:22-dev AS builder
+WORKDIR /app
 
-LABEL maintainer="Atif Haque atif.haque01@gmail.com"
+COPY package*.json ./
+RUN npm ci
 
-WORKDIR /familytree
-COPY build/ build
-COPY node_modules/ node_modules
-COPY *.json ./
+COPY tsconfig.json ./
+COPY src/ ./src/
+RUN ./node_modules/.bin/tsc --pretty
 
-RUN npm install
+# Trim node_modules to production deps only
+RUN npm ci --omit=dev
+
+# Stage 2: minimal production image (no npm, no shell)
+FROM cgr.dev/chainguard/node:22
+WORKDIR /app
+
+COPY --from=builder --chown=node:node /app/node_modules ./node_modules
+COPY --from=builder --chown=node:node /app/build ./build
 
 EXPOSE 3012
-
-WORKDIR /familytree/build
-
-CMD ["node", "server.js"]
+CMD ["node", "./build/server.js"]

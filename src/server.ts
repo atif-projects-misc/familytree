@@ -17,10 +17,13 @@ app.use(cors()); // Add this line to enable CORS
 
 app.post('/family/addMember', async (req: Request, res: Response) => {
   const newMember: Member = req?.body;
+  if (!newMember || !newMember.title || !newMember.sex) {
+    res.status(400).json({ error: 'Member requires at least a title and sex' });
+    return;
+  }
   try {
-    family.addMember(newMember).then((_id) => {
-      res.status(200).json(_id);
-    })
+    const _id = await family.addMember(newMember);
+    res.status(200).json(_id);
   } catch (error) {
     res.status(500).json({ error: 'Failed to insert new member' });
   }
@@ -34,9 +37,8 @@ app.put('/family/updateMember', async (req: Request, res: Response) => {
     return;
   }
   try {
-    family.updateMember(id, updatedMember).then(() => {
-      res.status(200).json({ message: 'Member updated' });
-    });
+    await family.updateMember(id, updatedMember);
+    res.status(200).json({ message: 'Member updated' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to update member' });
   }
@@ -44,39 +46,46 @@ app.put('/family/updateMember', async (req: Request, res: Response) => {
 
 app.post('/family/addRelationship', async (req: Request, res: Response) => {
   const newRelationships: Relationship[] = req?.body;
-  if (!newRelationships) {
+  if (!Array.isArray(newRelationships) || newRelationships.length === 0) {
     res.status(400).json({ error: 'Relationships not provided' });
+    return;
   }
   try {
-    family.addRelationship(newRelationships).then(() => {
-      res.status(200).json({ message: 'New relationship added' });
-    })
+    await family.addRelationship(newRelationships);
+    res.status(200).json({ message: 'New relationship added' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to insert new relationship' });
   }
 });
 
 app.get(`/family/getMemberById`, async (req: Request, res: Response) => {
+  const id = req.query.id as string;
+  if (!id) {
+    res.status(400).json({ error: 'Member id not provided' });
+    return;
+  }
   try {
-    family.getMember(req.query.id).then((member) => {
-      if (!member) {
-        res.status(404).json({ error: 'Member not found' });
-      }
-      res.status(200).json(member);
-    });
+    const member = await family.getMember(id);
+    if (!member) {
+      res.status(404).json({ error: 'Member not found' });
+      return;
+    }
+    res.status(200).json(member);
   } catch (error) {
     res.status(500).json({ error: 'Failed to retrieve family members' });
   }
 });
 
 app.get(`/family/getMemberByParam`, async (req: Request, res: Response) => {
+  const param = req.query.param as string;
+  const paramValue = req.query.param_value as string;
+  if (!param || paramValue === undefined) {
+    res.status(400).json({ error: 'param and param_value are required' });
+    return;
+  }
   try {
-    family.getMembersByParams(req.query.param, req.query.param_value).then((members) => {
-      if (!members) {
-        res.status(404).json({ error: 'Member(s) not found' });
-      }
-      res.status(200).json(members);
-    });
+    const members = await family.getMembersByParams(param, paramValue);
+    res.status(200).json(members);
   } catch (error) {
     res.status(500).json({ error: 'Failed to retrieve family member' });
   }
@@ -84,12 +93,8 @@ app.get(`/family/getMemberByParam`, async (req: Request, res: Response) => {
 
 app.get(`/family/getAllMembers`, async (_req: Request, res: Response) => {
   try {
-    family.getAllMembers().then((nodes) => {
-      if (!nodes) {
-        res.status(500).json({ error: 'Members not found in database' });
-      }
-      res.status(200).json(nodes);
-    });
+    const nodes = await family.getAllMembers();
+    res.status(200).json(nodes);
   } catch (error) {
     res.status(500).json({ error: 'Failed to retrieve family members' });
   }
@@ -97,32 +102,37 @@ app.get(`/family/getAllMembers`, async (_req: Request, res: Response) => {
 
 app.get(`/family/getAllRelationships`, async (_req: Request, res: Response) => {
   try {
-    family.getAllRelationships().then((edges) => {
-      if (!edges) {
-        res.status(404).json({ error: 'Members not found' });
-      }
-      res.status(200).json(edges);
-    });
+    const edges = await family.getAllRelationships();
+    res.status(200).json(edges);
   } catch (error) {
     res.status(500).json({ error: 'Failed to retrieve relationships' });
   }
 });
 
 app.delete(`/family/removeMember`, async (req: Request, res: Response) => {
+  const id = req.query.id as string;
+  if (!id) {
+    res.status(400).json({ error: 'Member id not provided' });
+    return;
+  }
   try {
-    family.removeMember(req.query.id).then(() => {
-      res.status(200).json({ message: 'Member removed' });
-    });
+    await family.removeMember(id);
+    res.status(200).json({ message: 'Member removed' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to remove member' });
   }
 });
 
 app.delete(`/family/removeRelationship`, async (req: Request, res: Response) => {
+  const source = req.query.source as string;
+  const target = req.query.target as string;
+  if (!source || !target) {
+    res.status(400).json({ error: 'source and target are required' });
+    return;
+  }
   try {
-    family.removeRelationship(req.query.source, req.query.target).then(() => {
-      res.status(200).json({ message: 'Relationship removed' });
-    });
+    await family.removeRelationship(source, target);
+    res.status(200).json({ message: 'Relationship removed' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to remove relationship' });
   }
