@@ -192,11 +192,31 @@ it sends a pair of rows (anchor→relative and relative→anchor), each typed fr
 its own perspective. `removeRelationship` therefore deletes **both** directions
 (`source→target` and `target→source`).
 
-There is one exception used by the frontend for deep ancestry labels:
-*label-only* rows have `relationType: "Relative"` (so they do **not** draw edges
-or affect layout) while `prettyType` carries a gendered label such as
-`"Great-grandfather"`. See the frontend README for details — the backend simply
-stores these rows verbatim.
+There are two kinds of derived rows the frontend may persist:
+
+- **Label-only**: `relationType: "Relative"`, `prettyType` carries the label
+  (e.g. `"Great-grandfather"`, `"Brother in law"`). No edge is drawn; exists
+  purely so the relationship-to-root label is correct when re-rooting.
+- **Visual derived**: `relationType` = the actual canonical type (e.g. `"Father"`,
+  `"Husband"`), set when the user checks "Show in graph" in the derivation
+  confirmation panel. These are persisted identically to manually-added rows.
+
+The backend stores both shapes verbatim — it does not validate `relationType`
+against an enumerated list.
+
+### Extended relationship vocabulary
+
+The frontend relationship type vocabulary (`RelationTypes` in the frontend
+`src/tree/types.ts`) was extended with four step in-law types. Any of the
+following may now appear as `relationType` or `prettyType` values:
+
+```
+"Step father in law" | "Step mother in law" | "Step son in law" | "Step daughter in law"
+```
+
+These join the existing in-law types (`"Father in law"`, `"Mother in law"`,
+`"Son in law"`, `"Daughter in law"`) and follow the same storage convention. The
+backend stores them as plain strings with no schema changes required.
 
 ---
 

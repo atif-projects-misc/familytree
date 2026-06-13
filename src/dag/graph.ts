@@ -35,7 +35,8 @@ export class Graph {
 
     public async getNodebyParam(param: string, param_value: string): Promise<Array<Node>> {
         if (this.database) {
-            const nodeData = await this.database.collection(Settings.collectionName).find({ [`member.${param}`]: { $regex: param_value, $options: 'i' } }).toArray();
+            // Nodes are persisted as { data: Member }, so member fields live under "data.".
+            const nodeData = await this.database.collection(Settings.collectionName).find({ [`data.${param}`]: { $regex: param_value, $options: 'i' } }).toArray();
             if (nodeData) {
                 return nodeData;
             }
@@ -170,7 +171,7 @@ export class Node {
         const memberData: Member = {
             badges: member?.badges || [],
             sex: member.sex,
-            subtitles: member?.subtitles || "",
+            subtitles: member?.subtitles || "unknown",
             title: member.title,
             titleBgColor: member?.titleBgColor || "rgb(63, 108, 191)",
             titleTextColor: member?.titleTextColor || "white",
